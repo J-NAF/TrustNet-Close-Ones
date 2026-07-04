@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustNet - Panel de Control Unificado</title>
+    <!-- SDKs Oficiales para el procesamiento de Tarjetas y Gráficos -->
+    <script src="https://mercadopago.com"></script>
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 850px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; }
+        .balance { font-size: 26px; font-weight: bold; color: #1b5e20; margin: 20px 0; background: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 5px solid #2e7d32; }
+        .admin-section { background: #f1f8ff; border-left: 5px solid #009ee3; padding: 20px; margin: 25px 0; border-radius: 6px; }
+        .charts-container { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 15px; }
+        .chart-box { flex: 1; min-width: 290px; background: white; padding: 15px; border: 1px solid #e1e4e8; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .input-money { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 15px; box-sizing: border-box; }
+        .twofa-box { background: #fffde7; border: 1px dashed #fbc02d; padding: 15px; border-radius: 6px; margin: 25px 0; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h2>Banca Familiar: <b style="color:#009ee3;">{{ usuario }}</b> <span style="font-size:11px; background:#e0e0e0; padding:4px 10px; border-radius:12px; font-weight:bold;">{{ rol.upper() }}</span></h2>
+        <a href="/logout" style="color: #d32f2f; text-decoration: none; font-weight: bold; font-size: 14px; border: 1px solid #d32f2f; padding: 5px 12px; border-radius: 4px;">Cerrar Sesión</a>
+    </div>
+
+    <div class="balance">Saldo Disponible Protegido: $<span id="saldo-display">{{ "{:,.2f}".format(saldo) }}</span></div>
+
+    {% if rol == 'admin' %}
+    <div class="admin-section">
+        <h3 style="margin-top: 0; color:#0d47a1;">📊 Auditoría en Tiempo Real (PostgreSQL Core)</h3>
+        <div class="charts-container">
+            <div class="chart-box">
+                <h4 style="text-align:center; margin:0 0 10px 0; font-size:14px; color:#555;">Tasa de Aprobación de Tarjetas</h4>
+                <div style="height:180px; position:relative;"><canvas id="chartPagos"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h4 style="text-align:center; margin:0 0 10px 0; font-size:14px; color:#555;">Distribución de Saldos por Familiar</h4>
+                <div style="height:180px; position:relative;"><canvas id="chartSaldos"></canvas></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+      <div class="twofa-box">
+        <div style="flex: 1; min-width: 250px;">
+            <h4 style="margin:0 0 5px 0; color:#f57f17;">📱 Llave Inviolable de Seguridad Celular (2FA)</h4>
+            <p style="font-size: 12px; color: #616161; margin: 0;">Escanea este patrón con <b>Google Authenticator</b> en tu teléfono para sincronizar tus códigos temporales.</p>
+        </div>
+        <div style="text-align: center; margin: 0 auto;">
+            <img src="https://googleapis.com{{ qr_uri | urlencode }}&choe=UTF-8" alt="Escanear Código QR 2FA" style="border: 4px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-radius: 4px;">
+        </div>
+    </div>
+
+    <h3>💳 Carga de Fondos</h3>
+    <input type="number" id="monto-carga" class="input-money" value="1000" min="10">
+    <div id="paymentCardBrick_container"></div>
+</div>
+
+<script>
+    const mp = new MercadoPago("{{ public_key }}");
+    const bricksBuilder = mp.bricks();
+
+    const renderCardBrick = async (bricksBuilder) => {
+        const settings = {
+            initialization: {
+                amount: parseFloat(document.getElementById('monto-carga').value),
+                payer: { email: "{{ usuario }}@trustnet.local" },
+            },
+            customization: {
+                visual: { style: { theme: "default" } },
+                paymentMethods: { maxInstallments: 1, types: { excluded: ['ticket'] } }
+            },
+            callbacks: {
+                onSubmit: (cardFormData) => {
+                    cardFormData.transaction_amount = document.getElementById('monto-carga').value;
+                    return new Promise((resolve, reject) => {
+                        fetch("/process_payment", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(cardFormData),
+                        })
+                        .then((res) => res.json())
+                        .then((result) => {
+                            if(result.status === "success") {
+                                alert("¡Transacción Exitosa! Fondos impactados permanentemente.");
+                                document.getElementById('saldo-display').innerText = result.nuevo_saldo.toLocaleString('es-AR', {minimumFractionDigits: 2});
+                                resolve();
+                            } else {
+                                alert("Transacción Rechazada: " + result.message);
+                                reject();
+                            }
+                        }).catch(() => { reject(); });
+                    });
+                }
+            },
+        };
+        window.cardBrickController = await bricksBuilder.create('cardPayment', 'paymentCardBrick_container', settings);
+    };
+    renderCardBrick(bricksBuilder);
+
+    document.getElementById('monto-carga').addEventListener('change', (e) => {
+        if(window.cardBrickController) window.cardBrickController.update({ amount: parseFloat(e.target.value) });
+    });
+
+    {% if stats %}
+    new Chart(document.getElementById('chartPagos'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Aprobados', 'Rechazados'],
+            datasets: [{ data: [{{ stats.aprobados }}, {{ stats.rechazados }}], backgroundColor: ['#2e7d32', '#d32f2f'] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    new Chart(document.getElementById('chartSaldos'), {
+        type: 'bar',
+        data: {
+            labels: [{% for u in stats.saldos_usuarios %}'{{ u.username }}',{% endfor %}],
+            datasets: [{ label: 'Liquidez ($)', data: [{% for u in stats.saldos_usuarios %}{{ u.saldo }},{% endfor %}], backgroundColor: '#009ee3' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+    {% endif %}
+</script>
+</body>
+</html>
