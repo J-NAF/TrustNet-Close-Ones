@@ -1,5 +1,6 @@
 import os
-from flask import Flask, render_template, request, redirect, url_inc, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+
 import psycopg2
 from psycopg2.extras import DictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
