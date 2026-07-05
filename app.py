@@ -17,7 +17,7 @@ def get_db_connection():
 with get_db_connection() as conn:
     with conn.cursor() as cur:
         cur.execute('''
-            CREATE TABLE IF NOT EXISTS usuarios (
+            CREATE TABLE IF NOT EXISTS usuarios_net (
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(100) UNIQUE NOT NULL,
                 username VARCHAR(50) UNIQUE NOT NULL,
@@ -49,7 +49,7 @@ def register():
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        'INSERT INTO usuarios (email, username, password) VALUES (%s, %s, %s)',
+                        'INSERT INTO usuarios_net (email, username, password) VALUES (%s, %s, %s)',
                         (email, username, hashed_password)
                     )
                     conn.commit()
@@ -80,7 +80,7 @@ def login():
         
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT * FROM usuarios WHERE username = %s', (username,))
+                cur.execute('SELECT * FROM usuarios_net WHERE username = %s', (username,))
                 user = cur.fetchone()
                 
         if user and check_password_hash(user['password'], password):
